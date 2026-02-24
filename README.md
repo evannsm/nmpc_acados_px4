@@ -184,7 +184,8 @@ Transactions on Robotics 2025
 
 ## Website
 
-Part of the [**evannsmc** open-source portfolio](https://www.evannsmc.com/projects) — [project page →](https://www.evannsmc.com/projects/nmpc-acados)
+- [evannsmc.com](https://www.evannsmc.com)
+- [Project page](https://www.evannsmc.com/projects/nmpc-acados)
 
 ## License
 
