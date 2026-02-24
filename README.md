@@ -3,7 +3,7 @@
 [![ROS 2 Compatible](https://img.shields.io/badge/ROS%202-Humble-blue)](https://docs.ros.org/en/humble/index.html)
 [![PX4 Compatible](https://img.shields.io/badge/PX4-Autopilot-pink)](https://github.com/PX4/PX4-Autopilot)
 [![Solver: ACADOS](https://img.shields.io/badge/Solver-ACADOS-brightgreen)](https://github.com/acados/acados)
-
+[![evannsmc.com](https://img.shields.io/badge/evannsmc.com-Project%20Page-blue)](https://www.evannsmc.com/projects/nmpc-acados)
 
 A ROS 2 Nonlinear Model Predictive Controller (NMPC) for quadrotors using the [Acados](https://docs.acados.org/) solver. Formulates the tracking problem with an error-based cost in Euler angle representation and uses `atan2`-based yaw wrapping for correct angular error computation.
 
@@ -181,6 +181,10 @@ Transactions on Robotics 2025
 
 - [2025_NewtonRaphson_QuadrotorComplete](https://github.com/evannsm/2025_NewtonRaphson_QuadrotorComplete)
 - [Blimp_SimHardware_NR_MPC_FBL_BodyOfWork2024](https://github.com/evannsm/Blimp_SimHardware_NR_MPC_FBL_BodyOfWork2024)
+
+## Website
+
+Part of the [**evannsmc** open-source portfolio](https://www.evannsmc.com/projects) — [project page →](https://www.evannsmc.com/projects/nmpc-acados)
 
 ## License
 
