@@ -53,21 +53,43 @@ ros2 run nmpc_acados_px4 run_node --platform sim --trajectory fig8_horz
 
 # Hardware flight with logging
 ros2 run nmpc_acados_px4 run_node --platform hw --trajectory helix --log
+
+# f8_contraction with feedforward, logged with _ff marker in filename
+ros2 run nmpc_acados_px4 run_node --platform sim --trajectory f8_contraction --ff --log
+# -> logs to: sim_nmpc_acados_px4_f8_contraction_ff_1x.csv
 ```
 
 ### CLI Options
 
-| Flag                                            | Description                       |
-| ----------------------------------------------- | --------------------------------- |
-| `--platform {sim,hw}`                           | Target platform (required)        |
-| `--trajectory {hover,yaw_only,circle_horz,...}` | Trajectory type (required)        |
-| `--hover-mode {1..8}`                           | Hover sub-mode (1-4 for hardware) |
-| `--log`                                         | Enable CSV data logging           |
-| `--log-file NAME`                               | Custom log filename               |
-| `--double-speed`                                | 2x trajectory speed               |
-| `--short`                                       | Short variant (fig8_vert)         |
-| `--spin`                                        | Enable yaw rotation               |
-| `--flight-period SEC`                           | Custom flight duration            |
+| Flag                                            | Description                                                    |
+| ----------------------------------------------- | -------------------------------------------------------------- |
+| `--platform {sim,hw}`                           | Target platform (required)                                     |
+| `--trajectory {hover,yaw_only,circle_horz,...}` | Trajectory type (required)                                     |
+| `--hover-mode {1..8}`                           | Hover sub-mode (1-4 for hardware)                              |
+| `--log`                                         | Enable CSV data logging                                        |
+| `--log-file NAME`                               | Custom log filename                                            |
+| `--double-speed`                                | 2x trajectory speed                                            |
+| `--short`                                       | Short variant (fig8_vert)                                      |
+| `--spin`                                        | Enable yaw rotation                                            |
+| `--flight-period SEC`                           | Custom flight duration                                         |
+| `--ff`                                          | Mark log filename with `_ff` (only valid with `f8_contraction`) |
+
+## Feedforward for `f8_contraction`
+
+When the `f8_contraction` trajectory is selected, the node computes a differential-flatness feedforward over the full NMPC horizon at each control step, using the same approach as the contraction controller.
+
+**How it works:**
+
+1. `generate_feedforward_trajectory` calls `flat_to_x_u` at each of the `N` horizon time steps via `jax.vmap`.
+2. `flat_to_x_u` differentiates the flat output `[px, py, pz, psi](t)` twice to recover:
+   - Velocity `[vx, vy, vz]`
+   - Specific thrust `f = sqrt(ax² + ay² + (az - g)²)` and Euler angles `[phi, th, psi]`
+   - A third differentiation yields `u_ff = [df, dphi, dth, dpsi]`
+3. The NMPC reference is updated per stage:
+   - **Euler reference** `[phi, th, psi]` comes from `x_ff` instead of `[0, 0, yaw]` — the NMPC now tracks the physically correct roll/pitch attitude the trajectory demands.
+   - **Control reference** `u_ref` = `[df, dphi, dth, dpsi]` is passed as the stage parameter instead of hover control — the cost penalizes deviation from the feedforward rates rather than from rest.
+
+This gives the NMPC a fully consistent reference trajectory in both state space and control space, rather than treating every stage as if hover is the desired input.
 
 ## Dependencies
 

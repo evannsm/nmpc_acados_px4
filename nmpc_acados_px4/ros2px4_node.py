@@ -41,7 +41,8 @@ from quad_trajectories import (
     TrajContext,
     TrajectoryType,
     TRAJ_REGISTRY,
-    generate_reference_trajectory
+    generate_reference_trajectory,
+    generate_feedforward_trajectory,
 )
 from nmpc_acados_px4_utils.controller.nmpc import (
     QuadrotorEulerModel,
@@ -53,6 +54,7 @@ from nmpc_acados_px4_utils.transformations.adjust_yaw import adjust_yaw
 from nmpc_acados_px4_utils.px4_utils.flight_phases import FlightPhase
 
 import time
+import jax
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
@@ -69,12 +71,13 @@ class OffboardControl(Node):
     def __init__(self, platform_type: PlatformType, trajectory: TrajectoryType = TrajectoryType.HOVER, hover_mode: int | None = None,
                  double_speed: bool = True, short: bool = False, spin: bool = False,
                  pyjoules: bool = False, csv_handler: CSVHandler | None = None, logging_enabled: bool = False,
-                 flight_period_: bool | None = None) -> None:
+                 flight_period_: bool | None = None, feedforward: bool = False) -> None:
 
         super().__init__('nmpc_euler_err_offboard_node')
         self.get_logger().info(f"{BANNER}Initializing ROS 2 node: '{self.__class__.__name__}'{BANNER}")
         self.sim = platform_type == PlatformType.SIM
         self.platform_type = platform_type
+        self.feedforward = feedforward
         self.trajectory_type = trajectory
         self.hover_mode = hover_mode
         self.double_speed = double_speed
@@ -196,6 +199,9 @@ class OffboardControl(Node):
         euler_des = np.array([0.01, 0.01, -0.01])
         self._ref0 = np.hstack((pos_des, vel_des, euler_des))
         self.reff = np.tile(self._ref0, (num_steps, 1))
+        self.u_ff_traj = None
+        self._ff_traj_jit = None  # JIT-compiled feedforward (created in jit_compile_trajectories)
+        self._traj_jit = None     # JIT-compiled trajectory generation (persists across mode switch)
 
         print(f"[Quadrotor MPC] Initial reference trajectory:\n{self._ref0}")
         t0 = time.time()
@@ -331,6 +337,44 @@ class OffboardControl(Node):
         print(f"{ref_whole[0,:]=}")
         print(f"{ref_whole.shape=}")
         # exit(0)
+
+        if self.ref_type == TrajectoryType.F8_CONTRACTION and self.feedforward:
+            print("  Compiling feedforward (generate_feedforward_trajectory)...")
+            ctx = TrajContext(sim=self.sim, hover_mode=self.hover_mode, spin=self.spin,
+                              double_speed=False, short=self.short)
+            traj_fn = TRAJ_REGISTRY[TrajectoryType.F8_CONTRACTION]
+            horizon, num_steps = self.horizon, self.num_steps
+            self._ff_traj_jit = jax.jit(
+                lambda t_start: generate_feedforward_trajectory(traj_fn, ctx, t_start, horizon, num_steps))
+
+            t0 = time.time()
+            xff, uff = self._ff_traj_jit(0.0)
+            jax.block_until_ready((xff, uff))
+            t1 = time.time()
+            xff, uff = self._ff_traj_jit(0.0)
+            jax.block_until_ready((xff, uff))
+            t2 = time.time()
+            print(f"  Feedforward (NO JIT): {t1 - t0:.4f}s, (JIT): {t2 - t1:.4f}s, "
+                  f"speed up: {(t1 - t0) / (t2 - t1):.2f}x")
+
+        # Store a single JIT-compiled trajectory function for the main trajectory.
+        # By capturing traj_fn and ctx in the closure here (they never change), JAX
+        # traces and compiles the XLA program exactly ONCE during init and reuses it
+        # on every control-loop call — eliminating retrace delays at mode switch.
+        print("  Storing persistent JIT for main trajectory...")
+        _ctx_main = TrajContext(
+            sim=self.sim, hover_mode=self.hover_mode, spin=self.spin,
+            double_speed=False if self.ref_type == TrajectoryType.F8_CONTRACTION else self.double_speed,
+            short=self.short)
+        _traj_fn_main = TRAJ_REGISTRY[self.ref_type]
+        _horizon, _num_steps = self.horizon, self.num_steps
+        self._traj_jit = jax.jit(
+            lambda t_start: generate_reference_trajectory(_traj_fn_main, t_start, _horizon, _num_steps, _ctx_main))
+        r, rd = self._traj_jit(0.0)
+        jax.block_until_ready((r, rd))  # first call: compiles
+        r, rd = self._traj_jit(0.0)
+        jax.block_until_ready((r, rd))  # second call: confirms fast
+        print(f"  Main trajectory JIT ready.")
     # ========== Subscriber Callbacks ==========
     def vehicle_odometry_callback(self, msg):
         """Process odometry and convert to Euler state."""
@@ -580,8 +624,77 @@ class OffboardControl(Node):
         #     f"\nTrajectory time: {self.trajectory_time:.2f}s, Reference time: {self.reference_time:.2f}s",
         #     throttle_duration_sec=throttle_val)
 
-        ref, ref_dot = self.generate_ref_trajectory(self.ref_type)
-        self.reff = np.hstack((ref[:, 0:3], ref_dot[:, 0:3], np.zeros((ref_dot.shape[0], 2)), ref[:, -1:]))
+        if self._traj_jit is not None:
+            ref, ref_dot = self._traj_jit(self.reference_time)
+        else:
+            ref, ref_dot = self.generate_ref_trajectory(self.ref_type)
+        if self.ref_type == TrajectoryType.F8_CONTRACTION and self.feedforward and self._ff_traj_jit is not None:
+            # --- Differential-flatness feedforward (f8_contraction only) ---
+            #
+            # flat_to_x_u differentiates the trajectory position function twice
+            # via jax.jacfwd to recover the full feedforward state and control:
+            #
+            #   x_ff = [px, py, pz, vx, vy, vz, f, phi, th, psi]
+            #   u_ff = [df, dphi, dth, dpsi]
+            #
+            # where f = specific thrust (m/s^2), phi/th/psi = roll/pitch/yaw,
+            # and u_ff gives their time-derivatives.
+            #
+            # generate_feedforward_trajectory vmaps this over the N horizon steps,
+            # each at the appropriate lookahead time.
+            x_ff_traj, u_ff_traj = self._ff_traj_jit(self.reference_time)
+
+            # Build the 9D state reference for each NMPC stage.
+            # Without feedforward, euler_ref would be [0, 0, yaw] — roll and pitch
+            # defaulting to zero.  Here we replace them with the physically correct
+            # roll/pitch/yaw that the trajectory demands (x_ff[:, 7:10]), so the
+            # NMPC's euler error cost (weight 2e1) pulls the drone toward the attitude
+            # the trajectory actually requires, rather than toward flat hover.
+            euler_ff = np.array(x_ff_traj[:, 7:10])  # [phi, th, psi] per step
+            self.reff = np.hstack((ref[:, 0:3], ref_dot[:, 0:3], euler_ff))
+
+            # Build u_ref_traj in the NMPC control space: u = [F (N), p, q, r (body rates)]
+            #
+            # flat_to_x_u gives:
+            #   x_ff[:, 6]   = f_specific (m/s²)   — specific thrust
+            #   x_ff[:, 7:9] = [roll, pitch]_ff     — feedforward Euler angles
+            #   u_ff[:, 0]   = df                   — rate of specific thrust (NOT used)
+            #   u_ff[:, 1:4] = [dphi, dth, dpsi]    — Euler angle rates (world-frame)
+            #
+            # NMPC u = [F (N), p, q, r] so we must convert:
+            #   F_ref   = mass * f_specific          (specific thrust → force in Newtons)
+            #   [p,q,r] = T^{-1}(roll,pitch) @ [dphi, dth, dpsi]
+            #             where T is the ZYX Euler-rate kinematic matrix
+            N = self.num_steps
+            mass = self.platform.mass
+            u_ref_traj = np.zeros((N, 4))
+
+            f_specific   = np.array(x_ff_traj[:, 6])          # (N,)  m/s²
+            rolls_ff     = np.array(x_ff_traj[:, 7])           # (N,)  rad
+            pitches_ff   = np.array(x_ff_traj[:, 8])           # (N,)  rad
+            euler_rates  = np.array(u_ff_traj[:, 1:4])         # (N,3) [dphi,dth,dpsi]
+
+            u_ref_traj[:, 0] = mass * f_specific               # F_ref in Newtons
+
+            for i in range(N):
+                roll, pitch = rolls_ff[i], pitches_ff[i]
+                sr, cr = np.sin(roll), np.cos(roll)
+                sp, cp = np.sin(pitch), np.cos(pitch)
+                tp = sp / cp  # tan(pitch)
+                # T maps body rates → Euler rates: [dphi,dth,dpsi] = T @ [p,q,r]
+                T = np.array([
+                    [1., sr * tp,  cr * tp],
+                    [0., cr,       -sr    ],
+                    [0., sr / cp,  cr / cp],
+                ])
+                u_ref_traj[i, 1:4] = np.linalg.solve(T, euler_rates[i])
+
+            self.u_ff_traj = u_ref_traj  # (N, 4): [F_ref (N), p_ref, q_ref, r_ref]
+        else:
+            # No feedforward: euler reference is [0, 0, yaw] (flat hover attitude)
+            # and u_ref is hover_ctrl for all stages (set inside solve_mpc_control).
+            self.reff = np.hstack((ref[:, 0:3], ref_dot[:, 0:3], np.zeros((ref_dot.shape[0], 2)), ref[:, -1:]))
+            self.u_ff_traj = None
         
 
         # self.get_logger().warning(f"\nCurrent state: {self.nmpc_state}", throttle_duration_sec=throttle_val)
@@ -613,9 +726,17 @@ class OffboardControl(Node):
             self.controller()
 
     def controller(self):
-        """Compute control input using error-based NMPC."""
+        """Compute control input using error-based NMPC.
+
+        self.reff   – (N, 9) state reference [p, v, euler] per stage.
+                      For f8_contraction the euler columns carry the feedforward
+                      roll/pitch/yaw; otherwise they are [0, 0, yaw].
+        self.u_ff_traj – (N, 4) feedforward control [df, dphi, dth, dpsi] per
+                      stage, or None (→ hover_ctrl used inside solver).
+        """
         u_nmpc, _, status = self.mpc_solver.solve_mpc_control(
-            self.nmpc_state, self.reff, self.last_input, nx=9, nu=4, verbose=False)
+            self.nmpc_state, self.reff, self.last_input, nx=9, nu=4, verbose=False,
+            u_ref_traj=self.u_ff_traj)
         self.new_inputs = u_nmpc
         self.status = status
 

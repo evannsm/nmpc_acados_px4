@@ -174,7 +174,7 @@ class QuadrotorEulerErrMPC:
             self.model_name, 'SQP', self.num_steps
         )
 
-    def solve_mpc_control(self, x0, xd, last_u, nx, nu, verbose=False):
+    def solve_mpc_control(self, x0, xd, last_u, nx, nu, verbose=False, u_ref_traj=None):
         """
         Solve the MPC optimization problem with error-based cost.
 
@@ -185,6 +185,8 @@ class QuadrotorEulerErrMPC:
             nx: State dimension (9)
             nu: Control dimension (4)
             verbose: Print solver statistics
+            u_ref_traj: Optional feedforward control reference (N, 4) [f_N, roll_rate, pitch_rate, yaw_rate].
+                        If None, hover control is used as reference for all stages.
 
         Returns:
             simU: Optimal control sequence (N, 4)
@@ -204,24 +206,48 @@ class QuadrotorEulerErrMPC:
         # Warm start with last control
         ocp_solver.set(0, "u", last_u)  # type: ignore
 
-        # Set references via parameters for each stage
-        # Parameters: [p_ref(3), v_ref(3), euler_ref(3), u_ref(4)] = 13D
+        # Pack stage-wise reference parameters.
+        #
+        # The Acados model exposes a 13D parameter vector p at every stage:
+        #   p = [p_ref(3), v_ref(3), euler_ref(3), u_ref(4)]
+        #
+        # The cost function then computes errors relative to these values:
+        #   p_err    = p    - p_ref       (position error)
+        #   v_err    = v    - v_ref       (velocity error)
+        #   euler_err= euler- euler_ref   (attitude error, yaw is wrapped)
+        #   u_err    = u    - u_ref       (control error)
+        #
+        # Stage cost = weighted sum of squared errors over all 13 dimensions.
+        # Terminal cost = same but without the u_err term (9D).
+        #
+        # Feedforward enters through two of these four terms:
+        #
+        #  1. euler_ref (columns 6:9 of xd) — when feedforward is active these
+        #     hold the physically correct roll/pitch/yaw that flat-output inversion
+        #     predicts the trajectory needs.  This makes euler_err penalise
+        #     deviation from the correct attitude rather than from flat hover.
+        #
+        #  2. u_ref — when u_ref_traj is provided it carries the feedforward
+        #     control [df, dphi, dth, dpsi] at each stage.  Without feedforward
+        #     u_ref = hover_ctrl = [m*g, 0, 0, 0], which biases the optimiser
+        #     toward rest.  With feedforward it is biased toward the nominal
+        #     control the trajectory demands, so the optimiser only needs to find
+        #     the residual correction rather than the full control from scratch.
         for i in range(N):
-            # State reference from trajectory
-            p_ref = xd[i, 0:3]
-            v_ref = xd[i, 3:6]
+            p_ref     = xd[i, 0:3]
+            v_ref     = xd[i, 3:6]
             euler_ref = xd[i, 6:9]
-            u_ref = self.hover_ctrl  # Hover control as reference
+            u_ref = np.array(u_ref_traj[i]) if u_ref_traj is not None else self.hover_ctrl
 
-            # Concatenate into parameter vector
             param_i = np.hstack((p_ref, v_ref, euler_ref, u_ref))
             ocp_solver.set(i, 'p', param_i)  # type: ignore
 
-        # Set terminal reference parameters
-        p_ref_e = xd[-1, 0:3]
-        v_ref_e = xd[-1, 3:6]
+        # Terminal stage: same structure but Acados uses it for the terminal cost
+        # (no u_err term, but u_ref is still required in the parameter vector).
+        p_ref_e     = xd[-1, 0:3]
+        v_ref_e     = xd[-1, 3:6]
         euler_ref_e = xd[-1, 6:9]
-        u_ref_e = self.hover_ctrl
+        u_ref_e = np.array(u_ref_traj[-1]) if u_ref_traj is not None else self.hover_ctrl
         param_e = np.hstack((p_ref_e, v_ref_e, euler_ref_e, u_ref_e))
         ocp_solver.set(N, 'p', param_e)  # type: ignore
 

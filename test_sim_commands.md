@@ -13,8 +13,10 @@ ros2 run nmpc_acados_px4 run_node --platform sim --trajectory fig8_horz   --doub
 ros2 run nmpc_acados_px4 run_node --platform sim --trajectory fig8_vert   --double-speed --log
 ros2 run nmpc_acados_px4 run_node --platform sim --trajectory fig8_vert   --double-speed --short --log
 ros2 run nmpc_acados_px4 run_node --platform sim --trajectory helix       --double-speed --log
-ros2 run nmpc_acados_px4 run_node --platform sim --trajectory sawtooth    --double-speed --log
-ros2 run nmpc_acados_px4 run_node --platform sim --trajectory triangle    --double-speed --log
+ros2 run nmpc_acados_px4 run_node --platform sim --trajectory sawtooth       --double-speed --log
+ros2 run nmpc_acados_px4 run_node --platform sim --trajectory triangle       --double-speed --log
+ros2 run nmpc_acados_px4 run_node --platform sim --trajectory f8_contraction --double-speed --log
+ros2 run nmpc_acados_px4 run_node --platform sim --trajectory f8_contraction --double-speed --ff --log
 ```
 
 ## Part 2: All PyJoules Except Helix Spin
@@ -29,8 +31,10 @@ ros2 run nmpc_acados_px4 run_node --platform sim --trajectory fig8_horz   --doub
 ros2 run nmpc_acados_px4 run_node --platform sim --trajectory fig8_vert   --double-speed --pyjoules --log
 ros2 run nmpc_acados_px4 run_node --platform sim --trajectory fig8_vert   --double-speed --short --pyjoules --log
 ros2 run nmpc_acados_px4 run_node --platform sim --trajectory helix       --double-speed --pyjoules --log
-ros2 run nmpc_acados_px4 run_node --platform sim --trajectory sawtooth    --double-speed --pyjoules --log
-ros2 run nmpc_acados_px4 run_node --platform sim --trajectory triangle    --double-speed --pyjoules --log
+ros2 run nmpc_acados_px4 run_node --platform sim --trajectory sawtooth       --double-speed --pyjoules --log
+ros2 run nmpc_acados_px4 run_node --platform sim --trajectory triangle       --double-speed --pyjoules --log
+ros2 run nmpc_acados_px4 run_node --platform sim --trajectory f8_contraction --double-speed --pyjoules --log
+ros2 run nmpc_acados_px4 run_node --platform sim --trajectory f8_contraction --double-speed --ff --pyjoules --log
 ```
 
 ## Part 3: Helix Spin with and without PyJoules

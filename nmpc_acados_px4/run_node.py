@@ -111,6 +111,11 @@ def create_parser():
         help='Set custom flight period in seconds (default: 30s)'
     )
 
+    parser.add_argument(
+        '--ff',
+        action='store_true',
+        help='Mark log filename with _ff suffix (only valid with --trajectory=f8_contraction)'
+    )
 
     return parser
 
@@ -137,6 +142,8 @@ def generate_log_filename(args) -> str:
     parts.append(args.platform.value)               # 'sim' or 'hw'
     parts.append("nmpc_acados_px4")           # controller id
     parts.append(args.trajectory.value)             # e.g., 'helix'
+    if args.ff:
+        parts.append("ff")
     parts.append("2x" if args.double_speed else "1x")
 
     if args.short:
@@ -160,9 +167,30 @@ def validate_args(args, parser: argparse.ArgumentParser) -> None:
         if args.hover_mode is not None:
             parser.error("--hover-mode is only valid when --trajectory=hover")
 
+    # --ff is only valid with f8_contraction
+    if args.ff and args.trajectory != TrajectoryType.F8_CONTRACTION:
+        parser.error("--ff is only valid with --trajectory=f8_contraction")
+
     # Match NR behavior: disallow --log-file unless --log is enabled
     if args.log_file is not None and not args.log:
         parser.error("--log-file requires --log to be enabled")
+
+
+def _logger_base_path(file_path: str, pkg_name: str) -> str:
+    """Return the base_path that Logger's algorithm needs to produce the correct log directory.
+
+    Logger does: os.path.dirname(base_path) → replaces install/build→src → inserts
+    data_analysis/log_files.  When installed by ROS 2, __file__ lives inside
+    lib/python3.X/site-packages/, which confuses the algorithm.  We find the
+    {ws}/{install_or_src}/{pkg_name} node in the path and return
+    {ws}/{install_or_src}/{pkg_name}/{pkg_name} so Logger gets the right root.
+    """
+    path  = os.path.abspath(file_path)
+    parts = path.split(os.sep)
+    for i, part in enumerate(parts[:-1]):
+        if part in ('install', 'src', 'build') and parts[i + 1] == pkg_name:
+            return os.sep.join(parts[:i + 2] + [pkg_name])
+    return os.path.dirname(path)  # fallback: works when running directly from src/
 
 
 def main():
@@ -180,7 +208,8 @@ def main():
     short = args.short
     spin = args.spin
     flight_period = args.flight_period
-    base_path = os.path.dirname(os.path.abspath(__file__))
+    feedforward = args.ff
+    base_path = _logger_base_path(__file__, 'nmpc_acados_px4')
 
     # Determine log filename
     if logging_enabled:
@@ -223,7 +252,8 @@ def main():
         pyjoules=pyjoules,
         csv_handler=CSVHandler(log_file, base_path) if pyjoules and log_file else None,
         logging_enabled=logging_enabled,
-        flight_period_=flight_period
+        flight_period_=flight_period,
+        feedforward=feedforward,
     )
 
     logger = None
