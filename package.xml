@@ -13,6 +13,7 @@
   <depend>px4_msgs</depend>
   <depend>quad_trajectories</depend>
   <depend>quad_platforms</depend>
+  <depend>ros2_logger</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

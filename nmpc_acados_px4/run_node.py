@@ -5,7 +5,7 @@ import traceback
 import argparse
 import os
 
-from Logger import Logger  # type: ignore
+from ros2_logger import Logger  # type: ignore
 from .ros2px4_node import OffboardControl
 
 from quad_platforms import PlatformType

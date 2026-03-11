@@ -25,7 +25,7 @@ This controller solves a finite-horizon optimal control problem at every timeste
 - **Nonlinear least squares** — cost type is `NONLINEAR_LS` with configurable weight matrices
 - **Input constraints** — hard bounds on thrust `[0, 27] N` and body rates `[-0.8, 0.8] rad/s`
 - **PX4 integration** — publishes attitude setpoints and offboard commands via `px4_msgs`
-- **Structured logging** — optional CSV logging via ROS2Logger
+- **Structured logging** — optional CSV logging via ros2_logger
 
 ## Cost Weights
 
@@ -95,7 +95,7 @@ This gives the NMPC a fully consistent reference trajectory in both state space 
 
 - [quad_trajectories](https://github.com/evannsm/quad_trajectories) — trajectory definitions
 - [quad_platforms](https://github.com/evannsm/quad_platforms) — platform abstraction
-- [ROS2Logger](https://github.com/evannsm/ROS2Logger) — experiment logging
+- [ros2_logger](https://github.com/evannsm/ROS2Logger) — experiment logging
 - [px4_msgs](https://github.com/PX4/px4_msgs) — PX4 ROS 2 message definitions
 - [Acados](https://docs.acados.org/) and `acados_template`
 - SciPy
