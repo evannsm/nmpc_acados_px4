@@ -246,7 +246,7 @@ class OffboardControl(Node):
             self.program_time_logtype = LogType("time", 6)
             self.trajectory_time_logtype = LogType("traj_time", 7)
             self.reference_time_logtype = LogType("ref_time", 8)
-            self.comptime_logtype = LogType("comptime", 9)
+            self.comptime_logtype = LogType("comp_time", 9)
 
             # State logs
             self.x_logtype = LogType("x", 10)
