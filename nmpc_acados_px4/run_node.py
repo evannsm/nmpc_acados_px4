@@ -131,12 +131,12 @@ def ensure_csv(filename: str) -> str:
 def generate_log_filename(args) -> str:
     """Generate auto log filename based on configuration.
 
-    Format: {platform}_nmpc_acados_px4_{trajectory}_{speed}[_{short}][_{spin}]
+    Format: {platform}_nmpc_acados_px4_{trajectory}_{speed}[_{short}][_{spin}]_py
 
     Examples:
-        sim_nmpc_acados_px4_helix_2x_spin.csv
-        sim_nmpc_acados_px4_circle_horz_1x.csv
-        hw_nmpc_acados_px4_fig8_vert_2x_short.csv
+        sim_nmpc_acados_px4_helix_2x_spin_py.csv
+        sim_nmpc_acados_px4_circle_horz_1x_py.csv
+        hw_nmpc_acados_px4_fig8_vert_2x_short_py.csv
     """
     parts = []
     parts.append(args.platform.value)               # 'sim' or 'hw'
@@ -150,6 +150,7 @@ def generate_log_filename(args) -> str:
         parts.append("short")
     if args.spin:
         parts.append("spin")
+    parts.append("py")
 
     return "_".join(parts)
 
