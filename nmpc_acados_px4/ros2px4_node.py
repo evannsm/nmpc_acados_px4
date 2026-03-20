@@ -338,11 +338,11 @@ class OffboardControl(Node):
         print(f"{ref_whole.shape=}")
         # exit(0)
 
-        if self.ref_type == TrajectoryType.F8_CONTRACTION and self.feedforward:
+        if self.ref_type == TrajectoryType.FIG8_CONTRACTION and self.feedforward:
             print("  Compiling feedforward (generate_feedforward_trajectory)...")
             ctx = TrajContext(sim=self.sim, hover_mode=self.hover_mode, spin=self.spin,
                               double_speed=False, short=self.short)
-            traj_fn = TRAJ_REGISTRY[TrajectoryType.F8_CONTRACTION]
+            traj_fn = TRAJ_REGISTRY[TrajectoryType.FIG8_CONTRACTION]
             horizon, num_steps = self.horizon, self.num_steps
             self._ff_traj_jit = jax.jit(
                 lambda t_start: generate_feedforward_trajectory(traj_fn, ctx, t_start, horizon, num_steps))
@@ -364,7 +364,7 @@ class OffboardControl(Node):
         print("  Storing persistent JIT for main trajectory...")
         _ctx_main = TrajContext(
             sim=self.sim, hover_mode=self.hover_mode, spin=self.spin,
-            double_speed=False if self.ref_type == TrajectoryType.F8_CONTRACTION else self.double_speed,
+            double_speed=False if self.ref_type == TrajectoryType.FIG8_CONTRACTION else self.double_speed,
             short=self.short)
         _traj_fn_main = TRAJ_REGISTRY[self.ref_type]
         _horizon, _num_steps = self.horizon, self.num_steps
@@ -628,8 +628,8 @@ class OffboardControl(Node):
             ref, ref_dot = self._traj_jit(self.reference_time)
         else:
             ref, ref_dot = self.generate_ref_trajectory(self.ref_type)
-        if self.ref_type == TrajectoryType.F8_CONTRACTION and self.feedforward and self._ff_traj_jit is not None:
-            # --- Differential-flatness feedforward (f8_contraction only) ---
+        if self.ref_type == TrajectoryType.FIG8_CONTRACTION and self.feedforward and self._ff_traj_jit is not None:
+            # --- Differential-flatness feedforward (fig8_contraction only) ---
             #
             # flat_to_x_u differentiates the trajectory position function twice
             # via jax.jacfwd to recover the full feedforward state and control:
@@ -729,7 +729,7 @@ class OffboardControl(Node):
         """Compute control input using error-based NMPC.
 
         self.reff   – (N, 9) state reference [p, v, euler] per stage.
-                      For f8_contraction the euler columns carry the feedforward
+                      For fig8_contraction the euler columns carry the feedforward
                       roll/pitch/yaw; otherwise they are [0, 0, yaw].
         self.u_ff_traj – (N, 4) feedforward control [df, dphi, dth, dpsi] per
                       stage, or None (→ hover_ctrl used inside solver).
