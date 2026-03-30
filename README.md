@@ -20,7 +20,7 @@ This controller solves a finite-horizon optimal control problem at every timeste
 
 ## Key Features
 
-- **Acados C-code generation** — solver is compiled once and cached for fast startup on subsequent runs
+- **Platform-aware Acados cache** — solver artifacts are reused when the platform/mass and NMPC formulation stamp still match, and regenerated automatically when they do not
 - **Error-state cost formulation** — references are passed as stage-wise parameters, not embedded in the cost
 - **Nonlinear least squares** — cost type is `NONLINEAR_LS` with configurable weight matrices
 - **Input constraints** — hard bounds on thrust `[0, 27] N` and body rates `[-0.8, 0.8] rad/s`

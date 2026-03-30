@@ -45,6 +45,8 @@ from quad_trajectories import (
     generate_feedforward_trajectory,
 )
 from nmpc_acados_px4_utils.controller.nmpc import (
+    DEFAULT_HORIZON,
+    DEFAULT_NUM_STEPS,
     QuadrotorEulerModel,
     QuadrotorEulerErrMPC
 )
@@ -172,8 +174,8 @@ class OffboardControl(Node):
         self.nu = u_.size()[0]
 
         generate_c_code = False
-        horizon = 2.0
-        num_steps = 50
+        horizon = DEFAULT_HORIZON
+        num_steps = DEFAULT_NUM_STEPS
         self.horizon = horizon
         self.num_steps = num_steps
         self.mpc_solver = QuadrotorEulerErrMPC(

@@ -11,6 +11,11 @@ from .ros2px4_node import OffboardControl
 from quad_platforms import PlatformType
 from quad_trajectories import TrajectoryType
 from pyJoules.handler.csv_handler import CSVHandler
+from nmpc_acados_px4_utils.controller.nmpc import (
+    DEFAULT_HORIZON,
+    DEFAULT_NUM_STEPS,
+    ensure_solver_artifacts,
+)
 
 def create_parser():
     """Create and configure argument parser.
@@ -199,6 +204,12 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
     validate_args(args, parser)
+
+    ensure_solver_artifacts(
+        platform=args.platform,
+        horizon=DEFAULT_HORIZON,
+        num_steps=DEFAULT_NUM_STEPS,
+    )
 
     platform = args.platform
     trajectory = args.trajectory
