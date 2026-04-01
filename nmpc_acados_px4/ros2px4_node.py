@@ -340,11 +340,12 @@ class OffboardControl(Node):
         print(f"{ref_whole.shape=}")
         # exit(0)
 
-        if self.ref_type == TrajectoryType.FIG8_CONTRACTION and self.feedforward:
+        if self.feedforward:
             print("  Compiling feedforward (generate_feedforward_trajectory)...")
             ctx = TrajContext(sim=self.sim, hover_mode=self.hover_mode, spin=self.spin,
-                              double_speed=False, short=self.short)
-            traj_fn = TRAJ_REGISTRY[TrajectoryType.FIG8_CONTRACTION]
+                              double_speed=False if self.ref_type == TrajectoryType.FIG8_CONTRACTION else self.double_speed,
+                              short=self.short)
+            traj_fn = TRAJ_REGISTRY[self.ref_type]
             horizon, num_steps = self.horizon, self.num_steps
             self._ff_traj_jit = jax.jit(
                 lambda t_start: generate_feedforward_trajectory(traj_fn, ctx, t_start, horizon, num_steps))
@@ -630,8 +631,8 @@ class OffboardControl(Node):
             ref, ref_dot = self._traj_jit(self.reference_time)
         else:
             ref, ref_dot = self.generate_ref_trajectory(self.ref_type)
-        if self.ref_type == TrajectoryType.FIG8_CONTRACTION and self.feedforward and self._ff_traj_jit is not None:
-            # --- Differential-flatness feedforward (fig8_contraction only) ---
+        if self.feedforward and self._ff_traj_jit is not None:
+            # --- Differential-flatness feedforward ---
             #
             # flat_to_x_u differentiates the trajectory position function twice
             # via jax.jacfwd to recover the full feedforward state and control:

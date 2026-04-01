@@ -119,7 +119,7 @@ def create_parser():
     parser.add_argument(
         '--ff',
         action='store_true',
-        help='Mark log filename with _ff suffix (only valid with --trajectory=fig8_contraction)'
+        help='Enable feedforward for the trajectory'
     )
 
     return parser
@@ -172,10 +172,6 @@ def validate_args(args, parser: argparse.ArgumentParser) -> None:
     else:
         if args.hover_mode is not None:
             parser.error("--hover-mode is only valid when --trajectory=hover")
-
-    # --ff is only valid with fig8_contraction
-    if args.ff and args.trajectory != TrajectoryType.FIG8_CONTRACTION:
-        parser.error("--ff is only valid with --trajectory=fig8_contraction")
 
     # Match NR behavior: disallow --log-file unless --log is enabled
     if args.log_file is not None and not args.log:
