@@ -66,7 +66,7 @@ from pyJoules.energy_meter import EnergyContext
 
 from ros2_logger import LogType, VectorLogType  # pyright: ignore[reportMissingImports, reportAttributeAccessIssue]
 
-GRAVITY: float = 9.806
+GRAVITY: float = 9.8  # Match Gazebo world
 
 
 class OffboardControl(Node):

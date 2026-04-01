@@ -21,7 +21,7 @@ from acados_template import AcadosModel
 
 class QuadrotorEulerModel:
     def __init__(self, mass: float):
-        self.g = 9.806  # gravity magnitude (z-up -> gravity points -z)
+        self.g = 9.8  # gravity magnitude — match Gazebo world (default.sdf)
         self.m = mass
 
     def dynamics(self):
